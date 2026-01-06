@@ -125,7 +125,7 @@ local function notifyUpdateOnce()
     if updateNotifyShown then return end
     updateNotifyShown = true
     Rayfield:Notify({
-        Title = "Update v2 Patch",
+        Title = "Update v6 Patch",
         Content = "New update patch loaded.",
         Duration = 6,
     })
