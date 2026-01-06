@@ -375,17 +375,56 @@ visibilityParams.FilterType = Enum.RaycastFilterType.Blacklist
 visibilityParams.IgnoreWater = true
 
 local FOVCircle
+local FOVStroke
+local FOVGui
+local FOVMode -- "drawing" or "ui"
 
 local function ensureFOVCircle()
     if FOVCircle then return FOVCircle end
     if not Drawing or not Drawing.new then
-        log("FOV circle unavailable (Drawing API missing)")
-        return nil
+        -- UI fallback circle using Stroke (for executors without Drawing)
+        local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+        if not ok or not cg then
+            log("FOV circle unavailable (no Drawing or CoreGui access)")
+            return nil
+        end
+        local gui = Instance.new("ScreenGui")
+        gui.Name = "AstraeaFOV"
+        gui.IgnoreGuiInset = true
+        gui.ResetOnSpawn = false
+        gui.Parent = cg
+
+        local frame = Instance.new("Frame")
+        frame.Name = "FOVCircle"
+        frame.AnchorPoint = Vector2.new(0.5, 0.5)
+        frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+        frame.Size = UDim2.fromOffset(300, 300)
+        frame.BackgroundTransparency = 1
+        frame.Visible = false
+        frame.Parent = gui
+
+        local stroke = Instance.new("UIStroke")
+        stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        stroke.LineJoinMode = Enum.LineJoinMode.Round
+        stroke.Thickness = 2
+        stroke.Parent = frame
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(1, 0)
+        corner.Parent = frame
+
+        FOVGui = gui
+        FOVCircle = frame
+        FOVStroke = stroke
+        FOVMode = "ui"
+        log("FOV circle using UI fallback (Drawing API missing)")
+        return frame
     end
     FOVCircle = Drawing.new("Circle")
     FOVCircle.Filled = false
     FOVCircle.NumSides = 64
     FOVCircle.Thickness = 2
+    FOVMode = "drawing"
     return FOVCircle
 end
 
@@ -394,18 +433,31 @@ local function updateFOVCircle()
     if not circle then return end
     local cfg = getgenv().Aimbot
     local color = cfg.FOVColor or Color3.fromRGB(80, 170, 255)
-    circle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    circle.Radius = cfg.FOVRadius or 150
-    circle.Transparency = cfg.FOVOpacity or 0.35
-    circle.Color = color
-    circle.Visible = cfg.FOVEnabled
+    local radius = cfg.FOVRadius or 150
+    local opacity = cfg.FOVOpacity or 0.35
+    if FOVMode == "drawing" then
+        circle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+        circle.Radius = radius
+        circle.Transparency = opacity
+        circle.Color = color
+        circle.Visible = cfg.FOVEnabled
+    else
+        circle.Size = UDim2.fromOffset(radius * 2, radius * 2)
+        circle.Position = UDim2.new(0.5, 0, 0.5, 0)
+        if FOVStroke then
+            FOVStroke.Color = color
+            FOVStroke.Thickness = 2
+            FOVStroke.Transparency = 1 - math.clamp(opacity, 0, 1)
+        end
+        circle.Visible = cfg.FOVEnabled
+    end
 end
 
 local function setFOVLoop(state)
     if state and not FOVConn then
         if not ensureFOVCircle() then
             getgenv().Aimbot.FOVEnabled = false
-            log("FOV circle disabled: Drawing API unavailable")
+            log("FOV circle disabled: unavailable")
             return
         end
         FOVConn = RunService.RenderStepped:Connect(function()
