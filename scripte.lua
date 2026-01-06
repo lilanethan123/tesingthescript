@@ -378,54 +378,83 @@ local FOVCircle
 local FOVStroke
 local FOVGui
 local FOVMode -- "drawing" or "ui"
+local FOVParentName = "unknown"
+
+local function getFOVParent()
+    local parent
+    local ok, uiParent = pcall(function()
+        if gethui then
+            local hui = gethui()
+            if hui then return hui end
+        end
+        return game:GetService("CoreGui")
+    end)
+    if ok and uiParent then
+        parent = uiParent
+        FOVParentName = parent.Name or "CoreGui"
+    else
+        local pgOk, pg = pcall(function() return lp:FindFirstChildOfClass("PlayerGui") or lp:WaitForChild("PlayerGui") end)
+        if pgOk and pg then
+            parent = pg
+            FOVParentName = "PlayerGui"
+        end
+    end
+    return parent
+end
 
 local function ensureFOVCircle()
     if FOVCircle then return FOVCircle end
-    if not Drawing or not Drawing.new then
-        -- UI fallback circle using Stroke (for executors without Drawing)
-        local ok, cg = pcall(function() return game:GetService("CoreGui") end)
-        if not ok or not cg then
-            log("FOV circle unavailable (no Drawing or CoreGui access)")
-            return nil
-        end
-        local gui = Instance.new("ScreenGui")
-        gui.Name = "AstraeaFOV"
-        gui.IgnoreGuiInset = true
-        gui.ResetOnSpawn = false
-        gui.Parent = cg
-
-        local frame = Instance.new("Frame")
-        frame.Name = "FOVCircle"
-        frame.AnchorPoint = Vector2.new(0.5, 0.5)
-        frame.Position = UDim2.new(0.5, 0, 0.5, 0)
-        frame.Size = UDim2.fromOffset(300, 300)
-        frame.BackgroundTransparency = 1
-        frame.Visible = false
-        frame.Parent = gui
-
-        local stroke = Instance.new("UIStroke")
-        stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-        stroke.LineJoinMode = Enum.LineJoinMode.Round
-        stroke.Thickness = 2
-        stroke.Parent = frame
-
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(1, 0)
-        corner.Parent = frame
-
-        FOVGui = gui
-        FOVCircle = frame
-        FOVStroke = stroke
-        FOVMode = "ui"
-        log("FOV circle using UI fallback (Drawing API missing)")
-        return frame
+    if Drawing and Drawing.new then
+        FOVCircle = Drawing.new("Circle")
+        FOVCircle.Filled = false
+        FOVCircle.NumSides = 64
+        FOVCircle.Thickness = 2
+        FOVMode = "drawing"
+        log("FOV circle using Drawing mode")
+        return FOVCircle
     end
-    FOVCircle = Drawing.new("Circle")
-    FOVCircle.Filled = false
-    FOVCircle.NumSides = 64
-    FOVCircle.Thickness = 2
-    FOVMode = "drawing"
-    return FOVCircle
+
+    local parent = getFOVParent()
+    if not parent then
+        log("FOV circle unavailable (no Drawing and no UI parent access)")
+        return nil
+    end
+
+    -- cleanup any stale gui
+    local old = parent:FindFirstChild("AstraeaFOV")
+    if old then pcall(function() old:Destroy() end) end
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "AstraeaFOV"
+    gui.IgnoreGuiInset = true
+    gui.ResetOnSpawn = false
+    gui.Parent = parent
+
+    local frame = Instance.new("Frame")
+    frame.Name = "FOVCircle"
+    frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+    frame.Size = UDim2.fromOffset(300, 300)
+    frame.BackgroundTransparency = 1
+    frame.Visible = false
+    frame.Parent = gui
+
+    local stroke = Instance.new("UIStroke")
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.LineJoinMode = Enum.LineJoinMode.Round
+    stroke.Thickness = 2
+    stroke.Parent = frame
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(1, 0)
+    corner.Parent = frame
+
+    FOVGui = gui
+    FOVCircle = frame
+    FOVStroke = stroke
+    FOVMode = "ui"
+    log("FOV circle using UI fallback (parent=" .. tostring(FOVParentName) .. ")")
+    return frame
 end
 
 local function updateFOVCircle()
