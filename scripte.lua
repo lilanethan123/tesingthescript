@@ -377,11 +377,11 @@ visibilityParams.IgnoreWater = true
 local FOVCircle
 local FOVStroke
 local FOVGui
-local FOVMode -- "drawing" or "ui"
+local FOVMode -- "ui"
 local FOVParentName = "unknown"
 
 local function getFOVParent()
-    local parent
+    -- Prefer gethui/CoreGui, then PlayerGui
     local ok, uiParent = pcall(function()
         if gethui then
             local hui = gethui()
@@ -390,41 +390,31 @@ local function getFOVParent()
         return game:GetService("CoreGui")
     end)
     if ok and uiParent then
-        parent = uiParent
-        FOVParentName = parent.Name or "CoreGui"
-    else
-        local pgOk, pg = pcall(function() return lp:FindFirstChildOfClass("PlayerGui") or lp:WaitForChild("PlayerGui") end)
-        if pgOk and pg then
-            parent = pg
-            FOVParentName = "PlayerGui"
-        end
+        FOVParentName = uiParent.Name or "CoreGui"
+        return uiParent
     end
-    return parent
+    local pgOk, pg = pcall(function() return lp:FindFirstChildOfClass("PlayerGui") or lp:WaitForChild("PlayerGui", 2) end)
+    if pgOk and pg then
+        FOVParentName = "PlayerGui"
+        return pg
+    end
+    return nil
 end
 
 local function ensureFOVCircle()
-    if FOVCircle and FOVMode == "ui" and (not FOVGui or not FOVGui.Parent) then
-        -- recreate if anti-cheat removed the GUI
+    if FOVCircle and (not FOVGui or not FOVGui.Parent) then
+        -- recreate if removed
         FOVCircle, FOVGui, FOVStroke = nil, nil, nil
     end
     if FOVCircle then return FOVCircle end
-    if Drawing and Drawing.new then
-        FOVCircle = Drawing.new("Circle")
-        FOVCircle.Filled = false
-        FOVCircle.NumSides = 64
-        FOVCircle.Thickness = 2
-        FOVMode = "drawing"
-        log("FOV circle using Drawing mode")
-        return FOVCircle
-    end
 
     local parent = getFOVParent()
     if not parent then
-        log("FOV circle unavailable (no Drawing and no UI parent access)")
+        warn("[Aimbot FOV] no UI parent access; circle unavailable")
+        log("FOV circle unavailable (no UI parent access)")
         return nil
     end
 
-    -- cleanup any stale gui
     local old = parent:FindFirstChild("AstraeaFOV")
     if old then pcall(function() old:Destroy() end) end
 
@@ -460,7 +450,7 @@ local function ensureFOVCircle()
     FOVCircle = frame
     FOVStroke = stroke
     FOVMode = "ui"
-    log("FOV circle using UI fallback (parent=" .. tostring(FOVParentName) .. ")")
+    log("FOV circle using UI mode (parent=" .. tostring(FOVParentName) .. ")")
     return frame
 end
 
@@ -471,22 +461,14 @@ local function updateFOVCircle()
     local color = cfg.FOVColor or Color3.fromRGB(80, 170, 255)
     local radius = cfg.FOVRadius or 150
     local opacity = cfg.FOVOpacity or 0.35
-    if FOVMode == "drawing" then
-        circle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-        circle.Radius = radius
-        circle.Transparency = opacity
-        circle.Color = color
-        circle.Visible = cfg.FOVEnabled
-    else
-        circle.Size = UDim2.fromOffset(radius * 2, radius * 2)
-        circle.Position = UDim2.new(0.5, 0, 0.5, 0)
-        if FOVStroke then
-            FOVStroke.Color = color
-            FOVStroke.Thickness = 2
-            FOVStroke.Transparency = 1 - math.clamp(opacity, 0, 1)
-        end
-        circle.Visible = cfg.FOVEnabled
+    circle.Size = UDim2.fromOffset(radius * 2, radius * 2)
+    circle.Position = UDim2.new(0.5, 0, 0.5, 0)
+    if FOVStroke then
+        FOVStroke.Color = color
+        FOVStroke.Thickness = 2
+        FOVStroke.Transparency = 1 - math.clamp(opacity, 0, 1)
     end
+    circle.Visible = cfg.FOVEnabled
 end
 
 local function setFOVLoop(state)
