@@ -8,26 +8,25 @@ local function bootError(msg)
     warn("[Astraea Boot] " .. tostring(msg))
 end
 
-local function ensureWritableEnv()
-    local env = getgenv and getgenv()
-    if type(env) ~= "table" then return true end
+local function ensureWritableTable(tbl, label)
+    if type(tbl) ~= "table" then return true end
     local function testWrite()
-        env.__rw_test = true
-        env.__rw_test = nil
+        tbl.__rw_test = true
+        tbl.__rw_test = nil
     end
-    if pcall(testWrite) then
-        return true
-    end
-    pcall(function() if setreadonly then setreadonly(env, false) end end)
-    pcall(function() if make_writeable then make_writeable(env) end end)
+    if pcall(testWrite) then return true end
+    pcall(function() if setreadonly then setreadonly(tbl, false) end end)
+    pcall(function() if make_writeable then make_writeable(tbl) end end)
     if not pcall(testWrite) then
-        bootError("getgenv is read-only on this executor; Rayfield cannot initialize.")
+        bootError(label .. " is read-only on this executor; UI cannot initialize.")
         return false
     end
     return true
 end
 
-if not ensureWritableEnv() then return end
+if not (ensureWritableTable(getgenv and getgenv(), "getgenv") and ensureWritableTable(_G, "_G") and ensureWritableTable(shared, "shared")) then
+    return
+end
 
 local RayfieldURL = "https://sirius.menu/rayfield"
 local rfSource
@@ -45,7 +44,12 @@ if not rfLoader then
     return
 end
 
-local Rayfield = rfLoader()
+local rfResult, rfInitErr = pcall(rfLoader)
+if not rfResult then
+    bootError("Rayfield init error: " .. tostring(rfInitErr))
+    return
+end
+local Rayfield = rfInitErr
 if not Rayfield then
     bootError("Rayfield returned nil; source may be invalid or blocked")
     return
@@ -401,6 +405,7 @@ local function setFOVLoop(state)
     if state and not FOVConn then
         if not ensureFOVCircle() then
             getgenv().Aimbot.FOVEnabled = false
+            log("FOV circle disabled: Drawing API unavailable")
             return
         end
         FOVConn = RunService.RenderStepped:Connect(function()
