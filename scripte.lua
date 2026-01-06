@@ -403,6 +403,10 @@ local function getFOVParent()
 end
 
 local function ensureFOVCircle()
+    if FOVCircle and FOVMode == "ui" and (not FOVGui or not FOVGui.Parent) then
+        -- recreate if anti-cheat removed the GUI
+        FOVCircle, FOVGui, FOVStroke = nil, nil, nil
+    end
     if FOVCircle then return FOVCircle end
     if Drawing and Drawing.new then
         FOVCircle = Drawing.new("Circle")
@@ -428,7 +432,10 @@ local function ensureFOVCircle()
     gui.Name = "AstraeaFOV"
     gui.IgnoreGuiInset = true
     gui.ResetOnSpawn = false
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.DisplayOrder = 999999
     gui.Parent = parent
+    pcall(function() if syn and syn.protect_gui then syn.protect_gui(gui) end end)
 
     local frame = Instance.new("Frame")
     frame.Name = "FOVCircle"
@@ -492,7 +499,7 @@ local function setFOVLoop(state)
         FOVConn = RunService.RenderStepped:Connect(function()
             updateFOVCircle()
         end)
-        log("Aimbot FOV circle loop started")
+        log("Aimbot FOV circle loop started (" .. tostring(FOVMode) .. ", parent=" .. tostring(FOVParentName) .. ")")
     elseif not state and FOVConn then
         FOVConn:Disconnect()
         FOVConn = nil
